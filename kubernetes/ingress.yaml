@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grpc-server
+  annotations:
+    cert-manager.io/issuer: my-ca-issuer
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: grpc-server.34.69.24.199.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: grpc-server
+            port:
+              number: 8081
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - grpc-server.34.69.24.199.nip.io
+    secretName: grpc-server-tls

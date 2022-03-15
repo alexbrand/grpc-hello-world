@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: grpc-server
+  name: grpc-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-server
+  template:
+    metadata:
+      labels:
+        app: grpc-server
+    spec:
+      containers:
+      - image: alexbrand/python-grpc-sample:v0.0.4
+        name: python-grpc-sample
+        env:
+          - name: LISTEN_ADDRESS
+            value: "0.0.0.0:8081"

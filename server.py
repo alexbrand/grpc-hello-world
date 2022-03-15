@@ -17,12 +17,6 @@ class Greeter(helloworld_pb2_grpc.GreeterServicer):
             self, request: helloworld_pb2.HelloRequest,
             context: grpc.aio.ServicerContext) -> helloworld_pb2.HelloReply:
 
-        await asyncio.sleep(0.5)
-        self._counter[context.peer()] += 1
-        if self._counter[context.peer()] % 100 == 0:
-            logging.info("Sending GOAWAY")
-            await context.abort(grpc.StatusCode.UNAVAILABLE, f"injected error {request.name}")
-
         logging.info('Successfully responding to RPC from %s', context.peer())
         return helloworld_pb2.HelloReply(message='Hello, %s!' % request.name)
 

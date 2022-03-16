@@ -3,22 +3,24 @@ import json
 import logging
 import os
 import grpc
+from tenacity import AsyncRetrying, RetryError, stop_after_attempt
+from tenacity.wait import wait_random_exponential
 import time
+import random
 
 helloworld_pb2, helloworld_pb2_grpc = grpc.protos_and_services(
     "helloworld.proto")
 
-async def sayHello(stub, req):
-    response = await stub.SayHello(req)
-    print("Greeter client received: " + response.message)
-
-async def worker(stub, name, queue):
-    while True:
-        req = await queue.get()
-        response = await sayHello(stub, req)
-        if isinstance(response, grpc.aio.AioRpcError):
-            print(r.debug_error_string())
-        queue.task_done()
+async def sayHello(stub, count):
+    try:
+        async for attempt in AsyncRetrying(stop=stop_after_attempt(5), wait=wait_random_exponential(multiplier=0.2, max=1)):
+            with attempt:
+                response = await stub.SayHello(helloworld_pb2.HelloRequest(name=f"you #{count}"))
+                print("Greeter client received: " + response.message)
+                return response
+    except Exception as ex:
+        print(f"{ex}")
+        pass
 
 async def main():
     logging.basicConfig()
@@ -27,30 +29,8 @@ async def main():
     channel = grpc.aio.secure_channel(server_url, ssl_credentials) 
     stub = helloworld_pb2_grpc.GreeterStub(channel)
 
-    queue = asyncio.Queue()
-
-    for i in range(10000):
-        req = helloworld_pb2.HelloRequest(name=f"you #{i}")
-        queue.put_nowait(req)
-
-    tasks = []
-    for i in range(200):
-        task = asyncio.create_task(worker(stub, f'worker-{i}', queue))
-        tasks.append(task)
-
-    # Wait until the queue is fully processed.
-    started_at = time.monotonic()
-    await queue.join()
-    total_time = time.monotonic() - started_at
-
-        # Cancel our worker tasks.
-    for task in tasks:
-        task.cancel()
-    # Wait until all worker tasks are cancelled.
+    tasks = [sayHello(stub, i) for i in range(0, 10000)]
     await asyncio.gather(*tasks, return_exceptions=True)
-
-    print('====')
-    print(f'3 workers drained the queue in {total_time:.2f} seconds')
 
 if __name__ == '__main__':
     asyncio.run(main())

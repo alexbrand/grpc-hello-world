@@ -4,6 +4,7 @@ import logging
 import random
 import os
 import grpc
+import time
 
 helloworld_pb2, helloworld_pb2_grpc = grpc.protos_and_services(
     "helloworld.proto")
@@ -32,6 +33,7 @@ async def serve(listen_addr) -> None:
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO,format="timestamp=%(asctime)s level=%(levelname)s threadName=%(threadName)s msg=%(message)s", datefmt="%m/%d/%Y %I:%M:%S %p %Z")
+    logging.Formatter.converter = time.gmtime
     listen_addr = os.getenv("LISTEN_ADDRESS", "localhost:8081")
     asyncio.run(serve(listen_addr))

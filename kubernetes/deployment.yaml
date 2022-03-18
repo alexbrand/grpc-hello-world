@@ -15,7 +15,7 @@ spec:
         app: grpc-server
     spec:
       containers:
-      - image: alexbrand/python-grpc-sample:v0.0.7
+      - image: alexbrand/python-grpc-sample:v0.0.8
         name: python-grpc-sample
         env:
           - name: LISTEN_ADDRESS

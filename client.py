@@ -34,6 +34,11 @@ async def worker(stub, name, queue):
         requestNumber = await queue.get()
         try:
             response = await say_hello(stub, requestNumber)
+            print(f"ok request={requestNumber}")
+        except Exception as ex:
+            print(f"error")
+        except asyncio.CancelledError:
+            raise
         finally:
             queue.task_done()
 
@@ -51,6 +56,7 @@ async def test_queue(stub, numWorkers):
     # Cancel our worker tasks.
     for task in tasks:
         task.cancel()
+
     # Wait until all worker tasks are cancelled.
     return await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -81,7 +87,7 @@ async def main():
 
     #res = await test_semaphores(stub, count=100)
     #res = await test_retries(stub)
-    res = await test_queue(stub, numWorkers=100)
+    res = await test_queue(stub, numWorkers=10)
     summary = {"success":0}
     for r in res:
         if not isinstance(r, grpc.aio.AioRpcError):

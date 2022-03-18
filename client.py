@@ -7,13 +7,21 @@ from tenacity import AsyncRetrying, RetryError, stop_after_attempt
 from tenacity.wait import wait_random_exponential
 import time
 import random
+from pyrate_limiter import Limiter, RequestRate, Duration
 
 helloworld_pb2, helloworld_pb2_grpc = grpc.protos_and_services(
     "helloworld.proto")
 
-NUM_REQUESTS=10_000
+NUM_REQUESTS=50_000
+
+limiter = Limiter(RequestRate(500, Duration.SECOND))
 
 async def say_hello(stub, count):
+    response = await stub.SayHello(helloworld_pb2.HelloRequest(name=f"you #{count}"))
+    print("Greeter client received: " + response.message)
+
+@limiter.ratelimit("foo", delay=True)
+async def say_hello_limiter(stub, count):
     response = await stub.SayHello(helloworld_pb2.HelloRequest(name=f"you #{count}"))
     print("Greeter client received: " + response.message)
 
@@ -30,17 +38,28 @@ async def test_semaphores(stub, count):
     return await gather_with_concurrency(count, *tasks)
 
 async def worker(stub, name, queue):
+    server_url = os.getenv("SERVER_URL", "localhost:8081")
+    ssl_credentials = grpc.ssl_channel_credentials()
+
+    channel = None
+    stub = None
+
+    reqCount = 0
     while True:
         requestNumber = await queue.get()
+        if reqCount == 0:
+            channel = grpc.aio.secure_channel(server_url, ssl_credentials) 
+            stub = helloworld_pb2_grpc.GreeterStub(channel)
         try:
             response = await say_hello(stub, requestNumber)
             print(f"ok request={requestNumber}")
         except Exception as ex:
-            print(f"error")
+            print(f"error: {ex}")
         except asyncio.CancelledError:
             raise
         finally:
             queue.task_done()
+            reqCount = (reqCount + 1) % 1000
 
 async def test_queue(stub, numWorkers):
     queue = asyncio.Queue()
@@ -78,6 +97,11 @@ async def test_retries(stub):
     tasks = [say_hello_with_retries(stub, i) for i in range(0, NUM_REQUESTS)]
     return await asyncio.gather(*tasks, return_exceptions=True)
 
+async def test_limiter(stub):
+    tasks = [say_hello_limiter(stub, i) for i in range(0, NUM_REQUESTS)]
+    return await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def main():
     logging.basicConfig()
     server_url = os.getenv("SERVER_URL", "localhost:8081")
@@ -87,7 +111,8 @@ async def main():
 
     #res = await test_semaphores(stub, count=100)
     #res = await test_retries(stub)
-    res = await test_queue(stub, numWorkers=10)
+    res = await test_queue(stub, numWorkers=100)
+    #res = await test_limiter(stub)
     summary = {"success":0}
     for r in res:
         if not isinstance(r, grpc.aio.AioRpcError):

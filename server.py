@@ -18,7 +18,7 @@ class Greeter(helloworld_pb2_grpc.GreeterServicer):
             self, request: helloworld_pb2.HelloRequest,
             context: grpc.aio.ServicerContext) -> helloworld_pb2.HelloReply:
 
-        logging.info('Successfully responding to RPC from %s', context.peer())
+        logging.info(f'Successfully responding to RPC from {request.name} @ {context.peer()}')
         return helloworld_pb2.HelloReply(message='Hello, %s!' % request.name)
 
 

@@ -13,7 +13,7 @@ helloworld_pb2, helloworld_pb2_grpc = grpc.protos_and_services(
 
 NUM_REQUESTS=10_000
 
-async def sayHello(stub, count):
+async def say_hello(stub, count):
     response = await stub.SayHello(helloworld_pb2.HelloRequest(name=f"you #{count}"))
     print("Greeter client received: " + response.message)
 
@@ -26,10 +26,35 @@ async def gather_with_concurrency(n, *tasks):
     return await asyncio.gather(*(sem_task(task) for task in tasks), return_exceptions=True)
 
 async def test_semaphores(stub, count):
-    tasks = [sayHello(stub, i) for i in range(NUM_REQUESTS)]
+    tasks = [say_hello(stub, i) for i in range(NUM_REQUESTS)]
     return await gather_with_concurrency(count, *tasks)
 
-async def sayHelloWithRetries(stub, count):
+async def worker(stub, name, queue):
+    while True:
+        requestNumber = await queue.get()
+        try:
+            response = await say_hello(stub, requestNumber)
+        finally:
+            queue.task_done()
+
+async def test_queue(stub, numWorkers):
+    queue = asyncio.Queue()
+    for i in range(NUM_REQUESTS):
+        queue.put_nowait(i)
+
+    tasks = []
+    for i in range(numWorkers):
+        task = asyncio.create_task(worker(stub, f'worker-{i}', queue))
+        tasks.append(task)
+
+    await queue.join()
+    # Cancel our worker tasks.
+    for task in tasks:
+        task.cancel()
+    # Wait until all worker tasks are cancelled.
+    return await asyncio.gather(*tasks, return_exceptions=True)
+
+async def say_hello_with_retries(stub, count):
     try:
         start = time.monotonic()
         print(f"request={count} start={time.monotonic()}")
@@ -44,7 +69,7 @@ async def sayHelloWithRetries(stub, count):
         re.reraise()
 
 async def test_retries(stub):
-    tasks = [sayHelloWithRetries(stub, i) for i in range(0, NUM_REQUESTS)]
+    tasks = [say_hello_with_retries(stub, i) for i in range(0, NUM_REQUESTS)]
     return await asyncio.gather(*tasks, return_exceptions=True)
 
 async def main():
@@ -54,8 +79,9 @@ async def main():
     channel = grpc.aio.secure_channel(server_url, ssl_credentials) 
     stub = helloworld_pb2_grpc.GreeterStub(channel)
 
-    res = await test_semaphores(stub, count=100)
+    #res = await test_semaphores(stub, count=100)
     #res = await test_retries(stub)
+    res = await test_queue(stub, numWorkers=100)
     summary = {"success":0}
     for r in res:
         if not isinstance(r, grpc.aio.AioRpcError):
